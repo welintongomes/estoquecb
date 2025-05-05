@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistema de Estoque com Código de Barras</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background-color: #f5f5f5;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 5px;
+            }
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            h1 {
+                font-size: 20px;
+            }
+            h2 {
+                font-size: 18px;
+            }
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background-color: #eee;
+            border: none;
+            outline: none;
+            flex: 1;
+            text-align: center;
+            font-weight: bold;
+        }
+        @media (max-width: 768px) {
+            .tab {
+                padding: 8px 5px;
+                font-size: 14px;
+            }
+        }
+        .tab.active {
+            background-color: #3498db;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 0 0 8px 8px;
+        }
+        @media (max-width: 768px) {
+            .tab-content {
+                padding: 10px;
+            }
+        }
+        .active-content {
+            display: block;
+        }
+        #scanner-container-add, #scanner-container-remove {
+            position: relative;
+            width: 100%;
+            max-width: 300px;
+            height: 200px;
+            overflow: hidden;
+            margin: 0 auto 20px auto;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background-color: #f0f0f0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        @media (max-width: 768px) {
+            button {
+                padding: 8px 10px;
+                font-size: 14px;
+                margin: 3px;
+                width: calc(50% - 6px);
+            }
+        }
+        button:hover {
+            background-color: #27ae60;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        @media (max-width: 768px) {
+            table {
+                font-size: 14px;
+            }
+            th, td {
+                padding: 8px 5px;
+            }
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .manual-entry {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+        .error {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .success {
+            color: #2ecc71;
+            font-weight: bold;
+        }
+        #notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px;
+            background-color: #2ecc71;
+            color: white;
+            border-radius: 5px;
+            display: none;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sistema de Estoque com Código de Barras</h1>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="openTab('add')">Adicionar ao Estoque</button>
+            <button class="tab" onclick="openTab('remove')">Retirar do Estoque</button>
+            <button class="tab" onclick="openTab('inventory')">Ver Estoque</button>
+        </div>
+        
+        <div id="add" class="tab-content active-content">
+            <h2>Adicionar Produto ao Estoque</h2>
+            
+            <div id="scanner-container-add">
+                <div id="scanner-add" style="width: 100%; height: 100%;"></div>
+            </div>
+            
+            <button onclick="startScannerAdd()">Iniciar Scanner</button>
+            <button onclick="stopScanner('add')">Parar Scanner</button>
+            
+            <div id="add-form" class="form-group">
+                <div class="form-group">
+                    <label for="barcode-add">Código de Barras:</label>
+                    <input type="text" id="barcode-add" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="product-name">Nome do Produto:</label>
+                    <input type="text" id="product-name">
+                </div>
+                <div class="form-group">
+                    <label for="quantity-add">Quantidade:</label>
+                    <input type="number" id="quantity-add" min="1" value="1">
+                </div>
+                <button onclick="addToInventory()">Adicionar ao Estoque</button>
+            </div>
+            
+            <div class="manual-entry">
+                <h3>Entrada Manual</h3>
+                <div class="form-group">
+                    <label for="manual-barcode-add">Código de Barras:</label>
+                    <input type="text" id="manual-barcode-add">
+                </div>
+                <button onclick="useManualBarcodeAdd()">Usar Código Manual</button>
+            </div>
+        </div>
+        
+        <div id="remove" class="tab-content">
+            <h2>Retirar Produto do Estoque</h2>
+            
+            <div id="scanner-container-remove">
+                <div id="scanner-remove" style="width: 100%; height: 100%;"></div>
+            </div>
+            
+            <button onclick="startScannerRemove()">Iniciar Scanner</button>
+            <button onclick="stopScanner('remove')">Parar Scanner</button>
+            
+            <div id="remove-form" class="form-group">
+                <div class="form-group">
+                    <label for="barcode-remove">Código de Barras:</label>
+                    <input type="text" id="barcode-remove" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="product-info">Produto:</label>
+                    <input type="text" id="product-info" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="stock-info">Estoque Atual:</label>
+                    <input type="text" id="stock-info" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="quantity-remove">Quantidade a Retirar:</label>
+                    <input type="number" id="quantity-remove" min="1" value="1">
+                </div>
+                <button onclick="removeFromInventory()">Retirar do Estoque</button>
+            </div>
+            
+            <div class="manual-entry">
+                <h3>Entrada Manual</h3>
+                <div class="form-group">
+                    <label for="manual-barcode-remove">Código de Barras:</label>
+                    <input type="text" id="manual-barcode-remove">
+                </div>
+                <button onclick="useManualBarcodeRemove()">Usar Código Manual</button>
+            </div>
+        </div>
+        
+        <div id="inventory" class="tab-content">
+            <h2>Estoque Atual</h2>
+            <table id="inventory-table">
+                <thead>
+                    <tr>
+                        <th>Código de Barras</th>
+                        <th>Produto</th>
+                        <th>Quantidade</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-body">
+                    <!-- Os produtos serão listados aqui -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div id="notification"></div>
+    
+    <script>
+        // Armazenar o inventário no localStorage
+        let inventory = JSON.parse(localStorage.getItem('inventory')) || {};
+        
+        // Controle das abas
+        function openTab(tabName) {
+            const tabs = document.getElementsByClassName('tab-content');
+            for (let i = 0; i < tabs.length; i++) {
+                tabs[i].classList.remove('active-content');
+            }
+            
+            const tabButtons = document.getElementsByClassName('tab');
+            for (let i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].classList.remove('active');
+            }
+            
+            document.getElementById(tabName).classList.add('active-content');
+            event.currentTarget.classList.add('active');
+            
+            // Parar qualquer scanner que esteja em execução
+            stopScanner('add');
+            stopScanner('remove');
+            
+            // Inicializar tabela de inventário se estiver na aba de inventário
+            if (tabName === 'inventory') {
+                updateInventoryTable();
+            }
+        }
+        
+        // Scanner para adicionar produtos
+        function startScannerAdd() {
+            if (Quagga.initialized) {
+                Quagga.stop();
+            }
+            
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#scanner-add'),
+                    constraints: {
+                        width: {min: 300},
+                        height: {min: 200},
+                        aspectRatio: {min: 1, max: 2},
+                        facingMode: "environment"
+                    },
+                    area: { // Define if you want to clip the image to a fixed area
+                        top: "0%",
+                        right: "0%",
+                        left: "0%",
+                        bottom: "0%"
+                    },
+                    singleChannel: false
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                numOfWorkers: 2,
+                frequency: 10,
+                decoder: {
+                    readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader", "upc_reader"]
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error(err);
+                    showNotification("Erro ao iniciar o scanner. Verifique se sua câmera está disponível.", "error");
+                    return;
+                }
+                console.log("Scanner iniciado com sucesso");
+                Quagga.start();
+            });
+            
+            Quagga.onDetected(function(result) {
+                console.log("Código detectado:", result.codeResult.code);
+                const code = result.codeResult.code;
+                document.getElementById('barcode-add').value = code;
+                stopScanner('add');
+                
+                // Se o produto já existe no inventário, preencher o nome
+                if (inventory[code]) {
+                    document.getElementById('product-name').value = inventory[code].name;
+                }
+                
+                showNotification("Código de barras detectado: " + code, "success");
+            });
+            
+            Quagga.initialized = true;
+        }
+        
+        // Scanner para remover produtos
+        function startScannerRemove() {
+            if (Quagga.initialized) {
+                Quagga.stop();
+            }
+            
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#scanner-remove'),
+                    constraints: {
+                        width: {min: 300},
+                        height: {min: 200},
+                        aspectRatio: {min: 1, max: 2},
+                        facingMode: "environment"
+                    },
+                    area: { // Define if you want to clip the image to a fixed area
+                        top: "0%",
+                        right: "0%",
+                        left: "0%",
+                        bottom: "0%"
+                    },
+                    singleChannel: false
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                numOfWorkers: 2,
+                frequency: 10,
+                decoder: {
+                    readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader", "upc_reader"]
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error(err);
+                    showNotification("Erro ao iniciar o scanner. Verifique se sua câmera está disponível.", "error");
+                    return;
+                }
+                console.log("Scanner iniciado com sucesso");
+                Quagga.start();
+            });
+            
+            Quagga.onDetected(function(result) {
+                console.log("Código detectado:", result.codeResult.code);
+                const code = result.codeResult.code;
+                document.getElementById('barcode-remove').value = code;
+                stopScanner('remove');
+                
+                // Verificar se o produto existe no inventário
+                if (inventory[code]) {
+                    document.getElementById('product-info').value = inventory[code].name;
+                    document.getElementById('stock-info').value = inventory[code].quantity;
+                    showNotification("Produto encontrado: " + inventory[code].name, "success");
+                } else {
+                    document.getElementById('product-info').value = "Produto não encontrado";
+                    document.getElementById('stock-info').value = "0";
+                    showNotification("Produto não encontrado no estoque", "error");
+                }
+            });
+            
+            Quagga.initialized = true;
+        }
+        
+        // Parar o scanner
+        function stopScanner(type) {
+            try {
+                if (Quagga.initialized) {
+                    Quagga.stop();
+                    Quagga.initialized = false;
+                    console.log("Scanner parado");
+                }
+            } catch (e) {
+                console.error("Erro ao parar o scanner:", e);
+                // Ignorar erro se o scanner não estiver em execução
+            }
+        }
+        
+        // Adicionar produto ao inventário
+        function addToInventory() {
+            const barcode = document.getElementById('barcode-add').value;
+            const name = document.getElementById('product-name').value;
+            const quantity = parseInt(document.getElementById('quantity-add').value);
+            
+            if (!barcode) {
+                showNotification("Por favor, escaneie um código de barras primeiro", "error");
+                return;
+            }
+            
+            if (!name) {
+                showNotification("Por favor, digite o nome do produto", "error");
+                return;
+            }
+            
+            if (isNaN(quantity) || quantity <= 0) {
+                showNotification("Por favor, digite uma quantidade válida", "error");
+                return;
+            }
+            
+            // Adicionar ou atualizar o produto no inventário
+            if (inventory[barcode]) {
+                inventory[barcode].quantity += quantity;
+                inventory[barcode].name = name; // Atualizar o nome se necessário
+            } else {
+                inventory[barcode] = {
+                    name: name,
+                    quantity: quantity
+                };
+            }
+            
+            // Salvar no localStorage
+            localStorage.setItem('inventory', JSON.stringify(inventory));
+            
+            // Limpar o formulário
+            document.getElementById('barcode-add').value = "";
+            document.getElementById('product-name').value = "";
+            document.getElementById('quantity-add').value = "1";
+            
+            showNotification(`${quantity} unidades de ${name} adicionadas ao estoque`, "success");
+        }
+        
+        // Remover produto do inventário
+        function removeFromInventory() {
+            const barcode = document.getElementById('barcode-remove').value;
+            const quantity = parseInt(document.getElementById('quantity-remove').value);
+            
+            if (!barcode) {
+                showNotification("Por favor, escaneie um código de barras primeiro", "error");
+                return;
+            }
+            
+            if (isNaN(quantity) || quantity <= 0) {
+                showNotification("Por favor, digite uma quantidade válida", "error");
+                return;
+            }
+            
+            // Verificar se o produto existe no inventário
+            if (!inventory[barcode]) {
+                showNotification("Produto não encontrado no estoque", "error");
+                return;
+            }
+            
+            // Verificar se há quantidade suficiente
+            if (inventory[barcode].quantity < quantity) {
+                showNotification(`Estoque insuficiente. Disponível: ${inventory[barcode].quantity}`, "error");
+                return;
+            }
+            
+            // Atualizar a quantidade
+            inventory[barcode].quantity -= quantity;
+            
+            // Se a quantidade chegar a zero, remover o produto
+            if (inventory[barcode].quantity === 0) {
+                delete inventory[barcode];
+            }
+            
+            // Salvar no localStorage
+            localStorage.setItem('inventory', JSON.stringify(inventory));
+            
+            // Limpar o formulário
+            document.getElementById('barcode-remove').value = "";
+            document.getElementById('product-info').value = "";
+            document.getElementById('stock-info').value = "";
+            document.getElementById('quantity-remove').value = "1";
+            
+            showNotification(`${quantity} unidades retiradas do estoque`, "success");
+        }
+        
+        // Usar código de barras manual para adicionar
+        function useManualBarcodeAdd() {
+            const manualBarcode = document.getElementById('manual-barcode-add').value;
+            
+            if (!manualBarcode) {
+                showNotification("Por favor, digite um código de barras", "error");
+                return;
+            }
+            
+            document.getElementById('barcode-add').value = manualBarcode;
+            
+            // Se o produto já existe no inventário, preencher o nome
+            if (inventory[manualBarcode]) {
+                document.getElementById('product-name').value = inventory[manualBarcode].name;
+            }
+            
+            document.getElementById('manual-barcode-add').value = "";
+        }
+        
+        // Usar código de barras manual para remover
+        function useManualBarcodeRemove() {
+            const manualBarcode = document.getElementById('manual-barcode-remove').value;
+            
+            if (!manualBarcode) {
+                showNotification("Por favor, digite um código de barras", "error");
+                return;
+            }
+            
+            document.getElementById('barcode-remove').value = manualBarcode;
+            
+            // Verificar se o produto existe no inventário
+            if (inventory[manualBarcode]) {
+                document.getElementById('product-info').value = inventory[manualBarcode].name;
+                document.getElementById('stock-info').value = inventory[manualBarcode].quantity;
+                showNotification("Produto encontrado: " + inventory[manualBarcode].name, "success");
+            } else {
+                document.getElementById('product-info').value = "Produto não encontrado";
+                document.getElementById('stock-info').value = "0";
+                showNotification("Produto não encontrado no estoque", "error");
+            }
+            
+            document.getElementById('manual-barcode-remove').value = "";
+        }
+        
+        // Atualizar a tabela de inventário
+        function updateInventoryTable() {
+            const tableBody = document.getElementById('inventory-body');
+            tableBody.innerHTML = "";
+            
+            // Converter o objeto em um array para poder ordenar
+            const inventoryArray = [];
+            for (const barcode in inventory) {
+                inventoryArray.push({
+                    barcode: barcode,
+                    name: inventory[barcode].name,
+                    quantity: inventory[barcode].quantity
+                });
+            }
+            
+            // Ordenar por nome
+            inventoryArray.sort((a, b) => a.name.localeCompare(b.name));
+            
+            // Adicionar linhas à tabela
+            for (const item of inventoryArray) {
+                const row = document.createElement('tr');
+                
+                const barcodeCell = document.createElement('td');
+                barcodeCell.textContent = item.barcode;
+                row.appendChild(barcodeCell);
+                
+                const nameCell = document.createElement('td');
+                nameCell.textContent = item.name;
+                row.appendChild(nameCell);
+                
+                const quantityCell = document.createElement('td');
+                quantityCell.textContent = item.quantity;
+                row.appendChild(quantityCell);
+                
+                tableBody.appendChild(row);
+            }
+            
+            // Se não houver itens no inventário
+            if (inventoryArray.length === 0) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 3;
+                cell.textContent = "Não há produtos no estoque";
+                cell.style.textAlign = "center";
+                row.appendChild(cell);
+                tableBody.appendChild(row);
+            }
+        }
+        
+        // Mostrar notificação
+        function showNotification(message, type) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.backgroundColor = type === "error" ? "#e74c3c" : "#2ecc71";
+            notification.style.display = "block";
+            
+            // Esconder após 3 segundos
+            setTimeout(() => {
+                notification.style.display = "none";
+            }, 3000);
+        }
+        
+        // Exemplo de dados iniciais para teste (remover em produção)
+        function addDemoData() {
+            if (Object.keys(inventory).length === 0) {
+                inventory = {
+                    "78942127": {
+                        name: "Folha de Fumo Trevo",
+                        quantity: 50
+                    },
+                    "12345678": {
+                        name: "Caneta Azul",
+                        quantity: 100
+                    },
+                    "87654321": {
+                        name: "Caderno Universitário",
+                        quantity: 30
+                    }
+                };
+                localStorage.setItem('inventory', JSON.stringify(inventory));
+            }
+        }
+        
+        // Inicializar o sistema
+        function init() {
+            addDemoData(); // Adicionar dados de demonstração (remover em produção)
+            updateInventoryTable();
+        }
+        
+        // Inicializar quando a página carregar
+        window.onload = init;
+    </script>
+</body>
+</html>
